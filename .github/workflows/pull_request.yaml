@@ -1,0 +1,93 @@
+name: CI on Pull Request
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+
+jobs:
+  java_build_and_test:
+    name: Java API Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Build and Test with Maven
+        run: |
+          echo "Simulating Java build and unit tests for DataUploadController..."
+          # Simulating creation of the Java artifact (JAR)
+          mkdir -p build/libs
+          echo "dummy jar content" > build/libs/data-upload-service.jar
+          
+      - name: Upload Java Artifact
+        # Artifact is uploaded so the separate deploy job can download it.
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-artifact
+          path: build/libs/data-upload-service.jar
+          
+  python_ci:
+    name: Python Scoring Engine Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        # This step verifies the unpinned requirements.txt is functional
+        run: |
+          pip install -r requirements.txt
+          echo "Dependencies installed."
+      - name: Run Python Unit Tests
+        run: echo "Simulating Python unit tests..."
+      
+      - name: Create and Upload Python Artifact
+        run: |
+          zip -r lambda-package.zip scoring_engine_lambda.py requirements.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-artifact
+          path: lambda-package.zip
+
+  terraform_validate:
+    name: Infrastructure Validation (IaC)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform Init
+        run: terraform init
+      - name: Terraform Validate
+        run: terraform validate
+        
+  deploy_to_staging:
+    name: Deploy to Staging Environment
+    needs: [java_build_and_test, python_ci, terraform_validate]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download Java Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: java-artifact
+          path: ./artifacts/java
+          
+      - name: Download Python Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: python-artifact
+          path: ./artifacts/python
+          
+      - name: Use Internal Deployment Workflow
+        uses: organization/internal-repo/.github/workflows/deploy.yml@main
+        with:
+          java_artifact_path: ./artifacts/java/data-upload-service.jar
+          python_artifact_path: ./artifacts/python/lambda-package.zip
+          environment: "staging"
