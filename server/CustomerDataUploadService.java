@@ -35,10 +35,8 @@ public class DataUploadController {
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
             LOGGER.info("Successfully established sync DB connection.");
             
-            // Simulating fetching a specific configuration setting
             String sql = "SELECT config_value FROM processing_config WHERE config_key = '" + fileContext + "_MAX_SIZE'";
             
-            // Anti-pattern: Using Statement instead of PreparedStatement (SQL Injection risk)
             try (Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery(sql)) {
                 
